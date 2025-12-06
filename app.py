@@ -179,7 +179,7 @@ if st.button("🚀 TẠO NGÂN HÀNG NHẬN XÉT (EXCEL)"):
                 
                 SỐ LƯỢNG YÊU CẦU ĐỢT NÀY: {BATCH_SIZE} câu cho MỖI mức độ.
                 
-                CẤU TRÚC 3 MỨC ĐỘ:
+                CẤU TRÚC BẮT BUỘC 3 MỨC ĐỘ:
                 1. MỨC: HOÀN THÀNH TỐT (T)
                 - Khen ngợi thành thạo kỹ năng, sáng tạo.
                 2. MỨC: HOÀN THÀNH (H)
