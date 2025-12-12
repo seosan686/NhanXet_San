@@ -86,7 +86,7 @@ def process_batch_response(content):
 st.markdown("""
 <div class="header-box">
     <h1>🗃️ TRỢ LÝ TẠO KHO NHẬN XÉT (TT27)</h1>
-    <p>Tác giả Lù Seo Sần - 097.1986.343</p>
+    <p>Tác giả Đinh Trần Anh - 097.999.6212</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -247,6 +247,6 @@ if st.button("🚀 TẠO NGÂN HÀNG NHẬN XÉT (EXCEL)"):
 # --- CHÂN TRANG ---
 st.markdown("""
 <div class="footer">
-    Bản quyền thuộc về Lù Seo Sần - Trường PTDTBT Tiểu học Bản Ngò
+    Bản quyền thuộc về Đinh Trần Anh - Trường Tiểu học Phù Loan 
 </div>
 """, unsafe_allow_html=True)
