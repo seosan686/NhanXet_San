@@ -40,11 +40,9 @@ st.markdown("""
 def classify_student(value):
     """Hàm phân loại học sinh"""
     s = str(value).upper().strip()
-    # Ký tự
     if s == 'T': return 'Hoàn thành tốt'
     if s == 'H': return 'Hoàn thành'
     if s == 'C': return 'Chưa hoàn thành'
-    # Điểm số
     try:
         score = float(value)
         if score >= 7: return 'Hoàn thành tốt'
@@ -67,7 +65,7 @@ def process_ai_response_to_list(content, level_filter):
             
         if (line.startswith('-') or line.startswith('*') or line[0].isdigit()) and current_level == level_filter:
             clean_text = line.lstrip("-*1234567890. ").replace("**", "").strip()
-            # Lọc bớt câu quá ngắn (dưới 30 ký tự là rác)
+            # Lọc: độ dài > 30 và không quá dài dòng
             if len(clean_text) > 30 and "MỨC:" not in clean_text: 
                 comments.append(clean_text)
     return comments
@@ -76,7 +74,7 @@ def process_ai_response_to_list(content, level_filter):
 st.markdown("""
 <div class="header-box">
     <h1>✍️ AUTO-FILL NHẬN XÉT (TT27)</h1>
-    <p>Phiên bản nhận xét chi tiết, đầy đủ 2 vế</p>
+    <p>Tác giả: Lù Seo Sần - Trường PTDTBT TH Bản Ngò</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -120,7 +118,7 @@ if student_file:
         with c4: chu_de = st.text_input("📝 Chủ đề/Bài học:", "Chủ đề E")
 
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🚀 TỰ ĐỘNG ĐIỀN NHẬN XÉT (CHI TIẾT 300 KÝ TỰ)"):
+        if st.button("🚀 ĐIỀN NHẬN XÉT (GIỚI HẠN 250 KÝ TỰ)"):
             if not api_key: st.toast("Thiếu API Key!"); st.stop()
             
             progress_bar = st.progress(0, text="Đang phân tích dữ liệu...")
@@ -141,32 +139,32 @@ if student_file:
                             tmp.write(file.getvalue()); media_files.append(genai.upload_file(tmp.name))
                     else: media_files.append(Image.open(file))
 
-            # 3. Prompt (ĐÃ NÂNG CẤP MẠNH MẼ)
-            progress_bar.progress(30, text="AI đang viết nhận xét chi tiết, đầy đủ 2 vế...")
+            # 3. Prompt (GIỚI HẠN 250 KÝ TỰ)
+            progress_bar.progress(30, text="AI đang viết nhận xét súc tích, đủ 2 vế...")
             
             model = genai.GenerativeModel('gemini-2.5-flash-lite-preview-09-2025')
             
             prompt = f"""
-            Bạn là giáo viên Tiểu học tâm huyết. Hãy viết bộ nhận xét CHI TIẾT cho môn {mon_hoc}, chủ đề: {chu_de}.
-            Dữ liệu minh chứng từ bài dạy: {context_text[:3000]}...
+            Bạn là giáo viên Tiểu học. Viết bộ nhận xét cho môn {mon_hoc}, chủ đề: {chu_de}.
+            Dữ liệu minh chứng: {context_text[:3000]}...
             
             YÊU CẦU QUAN TRỌNG:
-            1. ĐỘ DÀI: Khoảng 250 - 350 ký tự/câu. Không viết quá ngắn.
+            1. ĐỘ DÀI: TỐI ĐA 250 KÝ TỰ/CÂU. (Viết súc tích, không lan man).
             2. TỪ CẤM: "Em", "Con", "Bạn", "Nắm được".
             3. CẤU TRÚC 2 VẾ (BẮT BUỘC):
-               - Mức HOÀN THÀNH: [Vế 1: Điểm đã làm tốt] NHƯNG/TUY NHIÊN [Vế 2: Điểm cần rèn luyện thêm].
-               - Mức CHƯA HOÀN THÀNH: [Vế 1: Sự tham gia/cố gắng dù nhỏ] NHƯNG [Vế 2: Biện pháp hỗ trợ cụ thể của GV/PH].
+               - Mức HOÀN THÀNH: [Điểm làm tốt] NHƯNG/TUY NHIÊN [Điểm cần rèn thêm].
+               - Mức CHƯA HOÀN THÀNH: [Sự tham gia dù nhỏ] NHƯNG [Cần GV/PH hỗ trợ gì].
             
             HÃY VIẾT 3 NHÓM NHẬN XÉT (Mỗi nhóm 15 câu KHÁC NHAU):
             
-            1. NHÓM MỨC: HOÀN THÀNH TỐT (Lời khen sâu sắc)
-            - Ví dụ: Thể hiện tư duy rất tốt trong việc sắp xếp các thư mục trong máy tính, đồng thời biết hỗ trợ các bạn khác thực hành nhanh chóng.
+            1. NHÓM MỨC: HOÀN THÀNH TỐT (Khen ngợi + Sáng tạo)
+            - Ví dụ: Sử dụng chuột thành thạo, biết cách vẽ hình sáng tạo và phối màu rất hài hòa.
             
-            2. NHÓM MỨC: HOÀN THÀNH (Đủ 2 vế: Được và Chưa được)
-            - Ví dụ: Thực hiện được thao tác lưu bài vào thư mục đúng quy định, tuy nhiên cần chú ý đặt tên file ngắn gọn và khoa học hơn để dễ tìm kiếm.
+            2. NHÓM MỨC: HOÀN THÀNH (Được + Chưa được)
+            - Ví dụ: Biết cách lưu bài vào thư mục, tuy nhiên cần chú ý đặt tên file ngắn gọn hơn để dễ nhớ.
             
-            3. NHÓM MỨC: CHƯA HOÀN THÀNH (Đủ 2 vế: Ghi nhận và Hỗ trợ)
-            - Ví dụ: Có cố gắng quan sát thao tác của giáo viên trên màn hình, nhưng chưa tự mình thực hiện được việc tạo thư mục, cần giáo viên cầm tay chỉ việc thêm ở các tiết sau.
+            3. NHÓM MỨC: CHƯA HOÀN THÀNH (Ghi nhận + Hỗ trợ)
+            - Ví dụ: Biết quan sát thao tác mẫu, nhưng chưa tự mở được phần mềm, cần giáo viên cầm tay chỉ việc thêm.
             
             ĐỊNH DẠNG TRẢ VỀ:
             I. MỨC: HOÀN THÀNH TỐT
@@ -187,12 +185,12 @@ if student_file:
             pool_C = process_ai_response_to_list(response.text, "Chưa hoàn thành")
             
             # Fallback
-            if not pool_T: pool_T = ["Nắm vững kiến thức bài học, kỹ năng thực hành thành thạo và có tư duy sáng tạo trong quá trình học tập."]
-            if not pool_H: pool_H = ["Hoàn thành các yêu cầu cơ bản của bài học, tuy nhiên cần rèn luyện thêm kỹ năng thực hành để thao tác nhanh hơn."]
-            if not pool_C: pool_C = ["Có chú ý nghe giảng nhưng chưa thực hiện được yêu cầu bài học, cần sự hướng dẫn chi tiết hơn từ giáo viên."]
+            if not pool_T: pool_T = ["Thành thạo kiến thức bài học, vận dụng tốt vào thực hành."]
+            if not pool_H: pool_H = ["Hoàn thành yêu cầu cơ bản, tuy nhiên cần thao tác nhanh hơn."]
+            if not pool_C: pool_C = ["Có tham gia bài học nhưng chưa thực hành được, cần hướng dẫn thêm."]
 
             # 5. Điền dữ liệu
-            progress_bar.progress(80, text="Đang điền dữ liệu ngẫu nhiên vào file...")
+            progress_bar.progress(80, text="Đang điền dữ liệu vào file...")
             
             def fill_comment(level):
                 if level == 'Hoàn thành tốt': return random.choice(pool_T)
@@ -210,20 +208,20 @@ if student_file:
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False)
                 ws = writer.sheets['Sheet1']
-                # Tăng độ rộng cột để chứa nội dung dài
-                ws.column_dimensions[chr(65 + df.columns.get_loc(col_new))].width = 80 
+                # Chỉnh độ rộng cột vừa phải cho 250 ký tự (khoảng 60)
+                ws.column_dimensions[chr(65 + df.columns.get_loc(col_new))].width = 60 
             output.seek(0)
             
-            st.success("✅ Đã xong! Nội dung chi tiết, đầy đủ 2 vế.")
+            st.success("✅ Đã xử lý xong! Nội dung < 250 ký tự.")
             st.download_button(
                 label="⬇️ TẢI FILE EXCEL KẾT QUẢ",
                 data=output,
-                file_name=f"DanhSach_NhanXet_ChiTiet_{mon_hoc}.xlsx",
+                file_name=f"DanhSach_NhanXet_RutGon_{mon_hoc}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary"
             )
             
-            with st.expander("Xem mẫu nhận xét (10 em đầu)"):
+            with st.expander("Xem mẫu nhận xét"):
                 st.dataframe(df[[col_score, col_new]].head(10), use_container_width=True)
 
     except Exception as e:
