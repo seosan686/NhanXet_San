@@ -71,14 +71,16 @@ def process_ai_response_to_list(content, level_filter):
             
         if (line.startswith('-') or line.startswith('*') or line[0].isdigit()) and current_level == level_filter:
             clean_text = line.lstrip("-*1234567890. ").replace("**", "").strip()
-            if len(clean_text) > 5: comments.append(clean_text)
+            # Lọc bớt các câu quá ngắn hoặc không có nội dung
+            if len(clean_text) > 10 and "MỨC:" not in clean_text: 
+                comments.append(clean_text)
     return comments
 
 # --- 4. GIAO DIỆN CHÍNH ---
 st.markdown("""
 <div class="header-box">
     <h1>✍️ AUTO-FILL NHẬN XÉT (TT27)</h1>
-    <p>Tự động điền lời nhận xét vào danh sách học sinh</p>
+    <p>Tự động điền lời nhận xét CHUẨN MỰC vào file Excel</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -127,7 +129,7 @@ if student_file:
 
         # Nút chạy
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🚀 TỰ ĐỘNG ĐIỀN NHẬN XÉT VÀO FILE"):
+        if st.button("🚀 TỰ ĐỘNG ĐIỀN NHẬN XÉT (CHUẨN TT27)"):
             if not api_key: st.toast("Thiếu API Key!"); st.stop()
             
             progress_bar = st.progress(0, text="Đang phân tích dữ liệu...")
@@ -155,25 +157,41 @@ if student_file:
                     else: # Ảnh
                         media_files.append(Image.open(file))
 
-            # 3. Tạo kho nhận xét (Mỗi mức độ khoảng 15 câu mẫu đa dạng)
-            progress_bar.progress(30, text="AI đang viết các mẫu câu nhận xét đa dạng...")
+            # 3. Tạo kho nhận xét (PROMPT ĐÃ ĐƯỢC NÂNG CẤP LẠI)
+            progress_bar.progress(30, text="AI đang viết các mẫu câu nhận xét CHUẨN MỰC...")
             
+            # Dùng model flash mới nhất
             model = genai.GenerativeModel('gemini-2.5-flash-lite-preview-09-2025')
             
             prompt = f"""
-            Bạn là GV Tiểu học. Viết bộ nhận xét cho môn {mon_hoc}, bài {chu_de}.
-            Dữ liệu minh chứng bài dạy: {context_text[:2000]}...
+            Bạn là chuyên gia giáo dục Tiểu học. Nhiệm vụ: Xây dựng bộ nhận xét mẫu cho môn {mon_hoc}, bài/chủ đề: {chu_de}.
             
-            YÊU CẦU:
-            - Viết 15 câu nhận xét KHÁC NHAU cho mức: HOÀN THÀNH TỐT.
-            - Viết 15 câu nhận xét KHÁC NHAU cho mức: HOÀN THÀNH.
-            - Viết 15 câu nhận xét KHÁC NHAU cho mức: CHƯA HOÀN THÀNH.
+            DỮ LIỆU ĐẦU VÀO (Minh chứng từ tài liệu):
+            {context_text[:3000]}...
             
-            NGUYÊN TẮC: Không dùng "Em/Con", ngắn gọn, đúng TT27.
+            YÊU CẦU NGHIÊM NGẶT (Theo Thông tư 27):
+            1. TỪ CẤM TUYỆT ĐỐI: "Em", "Con", "Bạn", "Nắm được". (Chỉ dùng động từ/tính từ bắt đầu câu).
+            2. Nội dung phải bám sát từ khóa chuyên môn trong dữ liệu minh chứng bên trên.
+            3. Ngắn gọn, súc tích (dưới 20 từ) để điền vừa ô Excel.
             
-            ĐỊNH DẠNG TRẢ VỀ:
+            HÃY VIẾT 3 NHÓM NHẬN XÉT (Mỗi nhóm 20 câu KHÁC NHAU):
+            
+            1. NHÓM MỨC: HOÀN THÀNH TỐT (Dành cho HS xuất sắc)
+            - Cấu trúc: [Khen ngợi thành thạo kỹ năng] + [Sự sáng tạo/vượt trội].
+            - Ví dụ: Thành thạo thao tác chuột, biết cách vẽ hình sáng tạo.
+            
+            2. NHÓM MỨC: HOÀN THÀNH (Dành cho HS trung bình/khá)
+            - Cấu trúc: [Nội dung đã làm được], [Nội dung cần cố gắng thêm]. (Ngăn cách bằng dấu phẩy).
+            - Ví dụ: Biết soạn thảo văn bản, cần rèn thêm kỹ năng gõ 10 ngón.
+            
+            3. NHÓM MỨC: CHƯA HOÀN THÀNH (Dành cho HS yếu)
+            - Cấu trúc: [Điểm nhỏ đã tham gia/biết làm], [Biện pháp hỗ trợ/Cần rèn luyện thêm].
+            - Ví dụ: Biết mở máy tính, cần giáo viên hướng dẫn thêm cách cầm chuột.
+            
+            ĐỊNH DẠNG TRẢ VỀ (Bắt buộc để máy tính đọc):
             I. MỨC: HOÀN THÀNH TỐT
-            - [Câu 1]
+            - [Câu nhận xét 1]
+            - [Câu nhận xét 2]
             ...
             II. MỨC: HOÀN THÀNH
             ...
@@ -189,13 +207,13 @@ if student_file:
             pool_H = process_ai_response_to_list(response.text, "Hoàn thành")
             pool_C = process_ai_response_to_list(response.text, "Chưa hoàn thành")
             
-            # Fallback nếu AI tạo lỗi
-            if not pool_T: pool_T = ["Hoàn thành tốt nhiệm vụ học tập, có sự sáng tạo."]
-            if not pool_H: pool_H = ["Hoàn thành yêu cầu bài học, cần tích cực hơn."]
-            if not pool_C: pool_C = ["Cần cố gắng nhiều hơn để hoàn thành nhiệm vụ."]
+            # Dự phòng nếu AI trả về rỗng (Tránh lỗi phần mềm)
+            if not pool_T: pool_T = ["Thành thạo kiến thức bài học, vận dụng tốt vào thực hành."]
+            if not pool_H: pool_H = ["Hoàn thành yêu cầu bài học, cần rèn luyện thêm kỹ năng thực hành."]
+            if not pool_C: pool_C = ["Đã tham gia bài học, cần giáo viên hỗ trợ thêm nhiều."]
 
             # 5. Điền vào Excel (Randomize)
-            progress_bar.progress(80, text="Đang điền dữ liệu vào từng học sinh...")
+            progress_bar.progress(80, text="Đang điền dữ liệu ngẫu nhiên vào từng học sinh...")
             
             def fill_comment(level):
                 if level == 'Hoàn thành tốt': return random.choice(pool_T)
@@ -204,8 +222,6 @@ if student_file:
                 return ""
 
             df[col_new] = df['__Level_Temp__'].apply(fill_comment)
-            
-            # Xóa cột tạm
             del df['__Level_Temp__']
             
             progress_bar.progress(100, text="Hoàn tất!")
@@ -214,12 +230,11 @@ if student_file:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False)
-                # Auto-adjust column width
                 ws = writer.sheets['Sheet1']
                 ws.column_dimensions[chr(65 + df.columns.get_loc(col_new))].width = 50 
             output.seek(0)
             
-            st.success("✅ Đã xử lý xong! Hãy tải file về.")
+            st.success("✅ Đã xử lý xong! Nội dung đảm bảo đúng quy tắc cũ.")
             st.download_button(
                 label="⬇️ TẢI FILE EXCEL ĐÃ CÓ NHẬN XÉT",
                 data=output,
@@ -228,7 +243,7 @@ if student_file:
                 type="primary"
             )
             
-            with st.expander("Xem kết quả mẫu"):
+            with st.expander("Xem mẫu kết quả (10 em đầu tiên)"):
                 st.dataframe(df[[col_score, col_new]].head(10), use_container_width=True)
 
     except Exception as e:
