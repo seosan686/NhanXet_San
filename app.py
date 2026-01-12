@@ -4,12 +4,13 @@ from PIL import Image
 import tempfile
 import os
 import io
-import pandas as pd # Thư viện xử lý Excel
-import time # Thư viện thời gian
+import pandas as pd # Xử lý Excel
+from docx import Document # Xử lý Word
+import time
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(
-    page_title="Kho Nhận Xét Thông Minh TT27",
+    page_title="Kho Nhận Xét Thông Minh 4.0",
     page_icon="🗃️",
     layout="centered"
 )
@@ -75,7 +76,7 @@ def process_batch_response(content):
         if (line.startswith('-') or line.startswith('*') or line[0].isdigit()) and current_level:
             clean_text = line.lstrip("-*1234567890. ")
             clean_text = clean_text.replace("**", "")
-            if len(clean_text) > 5: # Chỉ lấy câu có nội dung, bỏ câu rác
+            if len(clean_text) > 5: 
                 batch_data.append({
                     "Mức độ": current_level,
                     "Nội dung nhận xét": clean_text
@@ -85,42 +86,62 @@ def process_batch_response(content):
 # --- 4. GIAO DIỆN CHÍNH ---
 st.markdown("""
 <div class="header-box">
-    <h1>🗃️ TRỢ LÝ TẠO KHO NHẬN XÉT (TT27)</h1>
+    <h1>🗃️ KHO NHẬN XÉT THÔNG MINH 4.0</h1>
     <p>Tác giả Lù Seo Sần - 097.1986.343</p>
 </div>
 """, unsafe_allow_html=True)
 
-if "GEMINI_API_KEY" in st.secrets:
-    api_key = st.secrets["GEMINI_API_KEY"]
-else:
-    with st.sidebar:
-        st.header("🔐 Cấu hình")
-        api_key = st.text_input("🔑 API Key:", type="password")
+# --- [NHẬP KEY CÁ NHÂN] ---
+with st.sidebar:
+    st.header("🔐 Đăng nhập hệ thống")
+    default_key = st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else ""
+    manual_key = st.text_input("🔑 Nhập API Key thay thế (nếu cần):", type="password")
+
+    if manual_key:
+        api_key = manual_key
+        st.info("⚠️ Đang dùng Key nhập tay")
+    elif default_key:
+        api_key = default_key
+        st.success("✅ Đang dùng Key hệ thống")
+    else:
+        api_key = None
+        st.warning("⬅️ Vui lòng nhập API Key để bắt đầu!")
 
 if api_key:
-    genai.configure(api_key=api_key)
+    try:
+        genai.configure(api_key=api_key)
+    except Exception as e:
+        st.error(f"Lỗi Key: {e}")
 
 # --- 5. KHUNG NHẬP LIỆU ---
-
 st.markdown("### 📂 1. TÀI LIỆU CĂN CỨ")
 st.markdown("""
 <div class="guide-box">
-<b>💡 Cơ chế mới:</b> Hệ thống sẽ tự động chạy nhiều lần để đảm bảo đủ số lượng câu thầy yêu cầu.
+<b>💡 Siêu hỗ trợ:</b> Hệ thống đọc được <b>Ảnh, PDF, Excel (.xlsx)</b> và cả <b>File Word (.docx)</b> chứa nội dung bài dạy hoặc tiêu chí.
 </div>
 """, unsafe_allow_html=True)
 
-uploaded_files = st.file_uploader("Kéo thả file vào đây (PDF/Ảnh):", type=["pdf", "png", "jpg"], accept_multiple_files=True)
+# [CẬP NHẬT] Thêm docx vào danh sách cho phép
+uploaded_files = st.file_uploader(
+    "Kéo thả file vào đây (Đa định dạng):", 
+    type=["pdf", "png", "jpg", "xlsx", "xls", "docx"], 
+    accept_multiple_files=True
+)
 
 if uploaded_files:
     st.success(f"✅ Đã nhận {len(uploaded_files)} file tài liệu.")
     st.markdown("---")
-    st.caption("👁️ Xem trước tài liệu (Thumbnails):")
+    st.caption("👁️ Xem trước tài liệu:")
     cols = st.columns(3)
     for i, file in enumerate(uploaded_files):
         if file.type in ["image/jpeg", "image/png"]:
             with cols[i % 3]: st.image(file, caption=f"Ảnh {i+1}", use_container_width=True)
         elif file.type == "application/pdf":
             with cols[i % 3]: st.info(f"📄 PDF: {file.name}")
+        elif "spreadsheet" in file.type or file.name.endswith(".xlsx"):
+            with cols[i % 3]: st.success(f"📊 Excel: {file.name}")
+        elif "word" in file.type or file.name.endswith(".docx"):
+            with cols[i % 3]: st.warning(f"📝 Word: {file.name}")
     st.markdown("---")
 
 st.markdown("### ⚙️ 2. CẤU HÌNH NỘI DUNG")
@@ -130,7 +151,7 @@ with c2: so_luong_tong = st.number_input("🔢 TỔNG số lượng mẫu mỗi 
 
 chu_de = st.text_input("📌 Chủ đề / Bài học:", "Chủ đề E: Ứng dụng tin học")
 
-# --- 6. XỬ LÝ AI (LOGIC VÒNG LẶP) ---
+# --- 6. XỬ LÝ AI ---
 st.markdown("<br>", unsafe_allow_html=True)
 
 if st.button("🚀 TẠO NGÂN HÀNG NHẬN XÉT (EXCEL)"):
@@ -138,115 +159,115 @@ if st.button("🚀 TẠO NGÂN HÀNG NHẬN XÉT (EXCEL)"):
     elif not uploaded_files: st.toast("Vui lòng tải tài liệu lên!", icon="⚠️")
     else:
         # Cấu hình chia lô
-        BATCH_SIZE = 10 # Mỗi lần chỉ xin AI 10 câu cho mỗi mức độ để nó làm cho chuẩn
+        BATCH_SIZE = 10 
         num_batches = (so_luong_tong // BATCH_SIZE) + (1 if so_luong_tong % BATCH_SIZE > 0 else 0)
         
-        all_results = [] # Nơi chứa toàn bộ kết quả gộp lại
-        
+        all_results = []
         progress_text = "Đang khởi động quy trình xử lý hàng loạt..."
         my_bar = st.progress(0, text=progress_text)
         
         try:
             model = genai.GenerativeModel('gemini-2.5-flash-lite-preview-09-2025')
             
-            # Xử lý file upload một lần
-            file_contents = []
+            # --- [XỬ LÝ ĐA ĐỊNH DẠNG] ---
+            file_contents = [] # Chứa file Media (Ảnh/PDF)
+            text_context_extra = "" # Chứa chữ từ Excel và Word
             temp_paths = []
+
             for file in uploaded_files:
-                if file.type == "application/pdf":
+                # 1. Xử lý Excel
+                if file.name.endswith('.xlsx') or file.name.endswith('.xls'):
+                    try:
+                        df_excel = pd.read_excel(file)
+                        text_context_extra += f"\n\n--- DỮ LIỆU TỪ EXCEL ({file.name}) ---\n{df_excel.to_string(index=False)}"
+                    except: pass
+
+                # 2. Xử lý Word (.docx) -> [MỚI]
+                elif file.name.endswith('.docx'):
+                    try:
+                        doc = Document(file)
+                        full_text = []
+                        for para in doc.paragraphs:
+                            full_text.append(para.text)
+                        # Đọc cả bảng trong Word nếu có
+                        for table in doc.tables:
+                            for row in table.rows:
+                                for cell in row.cells:
+                                    full_text.append(cell.text)
+                        
+                        text_context_extra += f"\n\n--- DỮ LIỆU TỪ WORD ({file.name}) ---\n" + "\n".join(full_text)
+                    except Exception as e:
+                        st.error(f"Lỗi đọc file Word {file.name}: {e}")
+
+                # 3. Xử lý PDF (Upload)
+                elif file.type == "application/pdf":
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                         tmp.write(file.getvalue())
                         temp_paths.append(tmp.name)
                     file_contents.append(genai.upload_file(tmp.name))
+                
+                # 4. Xử lý Ảnh
                 else:
                     file_contents.append(Image.open(file))
 
-            # BẮT ĐẦU VÒNG LẶP (LOOP)
+            # --- BẮT ĐẦU VÒNG LẶP ---
             for i in range(num_batches):
-                current_progress = (i / num_batches)
-                my_bar.progress(current_progress, text=f"⏳ Đang chạy đợt {i+1}/{num_batches} (Đang viết câu {i*BATCH_SIZE + 1} đến {(i+1)*BATCH_SIZE})...")
+                pct = (i / num_batches)
+                my_bar.progress(pct, text=f"⏳ Đợt {i+1}/{num_batches}: Đang viết câu {i*BATCH_SIZE + 1} đến {(i+1)*BATCH_SIZE}...")
                 
-                # Prompt yêu cầu AI sáng tạo khác đi mỗi lần
                 prompt = f"""
                 Bạn là chuyên gia giáo dục Tiểu học. Nhiệm vụ: Xây dựng KHO NHẬN XÉT cho môn {mon_hoc}, chủ đề: {chu_de}.
-                ĐÂY LÀ ĐỢT TẠO THỨ {i+1}. HÃY CỐ GẮNG VIẾT KHÁC VỚI NHỮNG CÂU THÔNG THƯỜNG.
+                ĐÂY LÀ ĐỢT TẠO THỨ {i+1}. HÃY CỐ GẮNG VIẾT KHÁC VỚI NHỮNG CÂU TRƯỚC.
                 
-                NGUYÊN TẮC CỐT LÕI:
-                1. Căn cứ: Bám sát tài liệu đính kèm, Chương trình GDPT 2018, Thông tư 27.
-                2. TỪ CẤM: "Em", "Con", "Nắm được".
-                3. Độ dài: < 380 ký tự.
-                4. Nội dung: Phải chứa từ khóa chuyên môn trong tài liệu.
+                DỮ LIỆU ĐẦU VÀO:
+                1. Xem ảnh/PDF đính kèm.
+                2. Đọc dữ liệu văn bản trích xuất từ Excel/Word dưới đây:
+                {text_context_extra}
                 
-                SỐ LƯỢNG YÊU CẦU ĐỢT NÀY: {BATCH_SIZE} câu cho MỖI mức độ.
+                NGUYÊN TẮC (TT27):
+                - Không dùng "Em", "Con", "Nắm được".
+                - Độ dài < 380 ký tự.
+                - Phải chứa từ khóa chuyên môn.
                 
-                CẤU TRÚC BẮT BUỘC 3 MỨC ĐỘ:
-                1. MỨC: HOÀN THÀNH TỐT (T)
-                - Khen ngợi thành thạo kỹ năng, sáng tạo.
-                2. MỨC: HOÀN THÀNH (H)
-                - [Những yêu cầu đã làm được], [Những yêu cầu cần cố gắng].
-                3. MỨC: CHƯA HOÀN THÀNH (C)
-                - [Những điểm đã tham gia/làm được], [Những yêu cầu cần cố gắng].
+                SỐ LƯỢNG: {BATCH_SIZE} câu/mức độ.
                 
-                ĐẦU RA (Định dạng để máy đọc):
+                CẤU TRÚC 3 MỨC:
                 I. MỨC: HOÀN THÀNH TỐT
-                - [Câu 1]
-                ...
+                - [Nội dung]
                 II. MỨC: HOÀN THÀNH
-                ...
+                - [Nội dung]
                 III. MỨC: CHƯA HOÀN THÀNH
-                ...
+                - [Nội dung]
                 """
                 
                 inputs = [prompt] + file_contents
                 response = model.generate_content(inputs)
                 
-                # Phân tích kết quả đợt này và gộp vào kho chung
                 batch_items = process_batch_response(response.text)
                 all_results.extend(batch_items)
-                
-                # Nghỉ 1 chút để không bị Google chặn spam
                 time.sleep(1)
 
-            # KẾT THÚC VÒNG LẶP
-            my_bar.progress(100, text="✅ Đã hoàn tất xử lý!")
+            # --- KẾT THÚC ---
+            my_bar.progress(100, text="✅ Xong!")
             
-            # TẠO FILE EXCEL TỔNG HỢP
             df = pd.DataFrame(all_results)
-            
-            # Lọc trùng lặp (nếu AI lỡ viết câu giống nhau)
             df.drop_duplicates(subset=['Nội dung nhận xét'], inplace=True)
             
-            st.success(f"✅ Đã tạo thành công {len(df)} câu nhận xét (Đã tự động lọc bỏ câu trùng).")
+            st.success(f"✅ Đã tạo {len(df)} câu nhận xét (Tổng hợp từ PDF, Ảnh, Excel, Word).")
 
-            # Xuất Excel
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False, sheet_name='NganHangNhanXet')
-                worksheet = writer.sheets['NganHangNhanXet']
-                worksheet.column_dimensions['A'].width = 20
-                worksheet.column_dimensions['B'].width = 80
+                ws = writer.sheets['NganHangNhanXet']
+                ws.column_dimensions['A'].width = 20; ws.column_dimensions['B'].width = 80
             output.seek(0)
             
-            st.download_button(
-                label=f"⬇️ TẢI FILE EXCEL TỔNG HỢP ({len(df)} CÂU)",
-                data=output,
-                file_name=f"Kho_Nhan_Xet_{mon_hoc}_TongHop.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary"
-            )
+            st.download_button(label="⬇️ TẢI FILE EXCEL", data=output, file_name=f"Kho_Nhan_Xet_{mon_hoc}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
 
-            with st.expander("👀 Xem trước dữ liệu tổng hợp"):
-                 st.dataframe(df, use_container_width=True)
-            
-            # Dọn dẹp
+            with st.expander("👀 Xem kết quả"): st.dataframe(df, use_container_width=True)
             for p in temp_paths: os.remove(p)
 
-        except Exception as e:
-            st.error(f"Lỗi: {e}")
+        except Exception as e: st.error(f"Lỗi: {e}")
 
 # --- CHÂN TRANG ---
-st.markdown("""
-<div class="footer">
-    Bản quyền thuộc về Lù Seo Sần - Trường PTDTBT Tiểu học Bản Ngò
-</div>
-""", unsafe_allow_html=True)
+st.markdown("<div class='footer'>Bản quyền thuộc về Lù Seo Sần - Trường PTDTBT Tiểu học Bản Ngò</div>", unsafe_allow_html=True)
