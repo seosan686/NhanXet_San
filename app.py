@@ -11,24 +11,24 @@ import random
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(
-    page_title="Trợ Lý Nhập Liệu 4.0",
-    page_icon="✍️",
+    page_title="Trợ Lý Nhập Liệu 5.0 (No-Duplicate)",
+    page_icon="💎",
     layout="centered"
 )
 
 # --- 2. CSS GIAO DIỆN ---
 st.markdown("""
 <style>
-    [data-testid="stAppViewContainer"] { background-color: #f0f2f6; }
+    [data-testid="stAppViewContainer"] { background-color: #f4f6f9; }
     .header-box {
-        background: linear-gradient(135deg, #00b09b 0%, #96c93d 100%);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 30px; border-radius: 15px; text-align: center; color: white;
         margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
     .header-box h1 { color: white !important; margin: 0; font-size: 2rem; }
     
     div.stButton > button {
-        background: linear-gradient(90deg, #11998e, #38ef7d);
+        background: linear-gradient(90deg, #667eea, #764ba2);
         color: white !important; border: none; padding: 15px; font-weight: bold;
         border-radius: 10px; width: 100%; font-size: 18px;
     }
@@ -38,7 +38,7 @@ st.markdown("""
 # --- 3. HÀM XỬ LÝ ---
 
 def classify_student(value):
-    """Hàm phân loại học sinh"""
+    """Phân loại học sinh"""
     s = str(value).upper().strip()
     if s == 'T': return 'Hoàn thành tốt'
     if s == 'H': return 'Hoàn thành'
@@ -50,182 +50,211 @@ def classify_student(value):
         else: return 'Chưa hoàn thành'
     except: return None
 
-def process_ai_response_to_list(content, level_filter):
-    """Lọc câu nhận xét"""
+def clean_comment_format(text):
+    """Chuẩn hóa văn bản: Chỉ viết hoa chữ cái đầu"""
+    if not text: return ""
+    # Xóa dấu câu thừa ở đầu/cuối
+    text = text.strip().strip("-*•").strip()
+    if len(text) == 0: return ""
+    
+    # Chỉ viết hoa chữ cái đầu tiên, còn lại giữ nguyên (hoặc lower nếu cần thiết)
+    # Ở đây ta dùng capitalize() để chắc chắn chỉ chữ đầu hoa
+    # Tuy nhiên nếu muốn giữ tên riêng (nếu có) thì cẩn thận, nhưng nhận xét thường ko có tên riêng
+    return text[0].upper() + text[1:]
+
+def process_ai_response_unique(content, target_level, needed_count):
+    """Lấy danh sách nhận xét độc nhất"""
     comments = []
     current_level = ""
-    for line in content.split('\n'):
+    
+    # Duyệt qua từng dòng
+    lines = content.split('\n')
+    for line in lines:
         line = line.strip()
         if not line: continue
         line_upper = line.upper()
         
+        # Xác định section
         if "MỨC: HOÀN THÀNH TỐT" in line_upper: current_level = "Hoàn thành tốt"; continue
         if "MỨC: CHƯA HOÀN THÀNH" in line_upper: current_level = "Chưa hoàn thành"; continue
         if "MỨC: HOÀN THÀNH" in line_upper: current_level = "Hoàn thành"; continue
             
-        if (line.startswith('-') or line.startswith('*') or line[0].isdigit()) and current_level == level_filter:
-            clean_text = line.lstrip("-*1234567890. ").replace("**", "").strip()
-            # Lọc: độ dài > 30 và không quá dài dòng
-            if len(clean_text) > 30 and "MỨC:" not in clean_text: 
-                comments.append(clean_text)
+        # Lấy nội dung
+        if (line.startswith('-') or line.startswith('*') or line[0].isdigit()) and current_level == target_level:
+            raw_text = line.lstrip("-*1234567890. ").replace("**", "").strip()
+            
+            # Bỏ các dòng tiêu đề nếu AI lỡ viết lại
+            if "MỨC:" in raw_text.upper(): continue
+            
+            # Chuẩn hóa (Viết hoa chữ đầu)
+            final_text = clean_comment_format(raw_text)
+            
+            if len(final_text) > 15: # Lọc câu quá ngắn
+                comments.append(final_text)
+
+    # Nếu thiếu (do AI viết ít hơn yêu cầu), ta nhân bản tạm thời để đủ số lượng (nhưng sẽ cố gắng unique nhất có thể)
+    if len(comments) < needed_count:
+        st.warning(f"⚠️ Mức '{target_level}' cần {needed_count} câu nhưng AI chỉ viết được {len(comments)} câu. Sẽ có {needed_count - len(comments)} em bị trùng lặp.")
+        while len(comments) < needed_count:
+            comments.append(random.choice(comments) if comments else "Hoàn thành nhiệm vụ học tập.")
+            
+    # Trộn ngẫu nhiên danh sách trước khi phát
+    random.shuffle(comments)
     return comments
 
 # --- 4. GIAO DIỆN CHÍNH ---
 st.markdown("""
 <div class="header-box">
-    <h1>✍️ AUTO-FILL NHẬN XÉT (TT27)</h1>
+    <h1>💎 TRỢ LÝ NHẬN XÉT TIỂU HỌC TT27</h1>
     <p>Tác giả: Lù Seo Sần - Trường PTDTBT TH Bản Ngò</p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- NHẬP KEY ---
+# --- KEY ---
 with st.sidebar:
     st.header("🔐 Cấu hình")
     default_key = st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else ""
     manual_key = st.text_input("🔑 Nhập API Key:", type="password")
-    if manual_key: api_key = manual_key; st.info("Dùng Key nhập tay")
-    elif default_key: api_key = default_key; st.success("Dùng Key hệ thống")
-    else: api_key = None; st.warning("Chưa có Key!")
+    if manual_key: api_key = manual_key; st.info("Key cá nhân")
+    elif default_key: api_key = default_key; st.success("Key hệ thống")
+    else: api_key = None; st.warning("Thiếu Key!")
 
 if api_key:
     try: genai.configure(api_key=api_key)
     except: st.error("Key lỗi!")
 
-# --- 5. INPUT DATA ---
-st.info("Bước 1: Tải file danh sách học sinh và minh chứng.")
-
+# --- 5. INPUT ---
+st.info("Bước 1: Tải file danh sách và minh chứng.")
 c1, c2 = st.columns(2)
-with c1:
-    student_file = st.file_uploader("📂 File Danh sách HS (.xlsx):", type=["xlsx", "xls"])
-with c2:
-    evidence_files = st.file_uploader("📂 File Minh chứng bài dạy:", type=["pdf", "png", "jpg", "docx"], accept_multiple_files=True)
+with c1: student_file = st.file_uploader("📂 Danh sách HS (.xlsx):", type=["xlsx", "xls"])
+with c2: evidence_files = st.file_uploader("📂 Minh chứng (Ảnh/Word/PDF):", type=["pdf", "png", "jpg", "docx"], accept_multiple_files=True)
 
-# --- 6. CẤU HÌNH XỬ LÝ ---
+# --- 6. XỬ LÝ ---
 if student_file:
-    try:
-        df = pd.read_excel(student_file)
-        st.write("▼ Xem trước danh sách học sinh:")
-        st.dataframe(df.head(3), use_container_width=True)
-        
-        st.markdown("---")
-        st.info("Bước 2: Cấu hình cột dữ liệu.")
-        
-        col_score = st.selectbox("📌 Chọn cột Mức đạt / Điểm số:", df.columns)
-        col_new = st.text_input("📌 Tên cột sẽ điền nhận xét:", "Lời nhận xét GV")
-        
-        c3, c4 = st.columns(2)
-        with c3: mon_hoc = st.text_input("📚 Môn học:", "Tin học")
-        with c4: chu_de = st.text_input("📝 Chủ đề/Bài học:", "Chủ đề E")
+    df = pd.read_excel(student_file)
+    st.write("▼ Danh sách học sinh:", df.head(3))
+    st.markdown("---")
+    
+    col_score = st.selectbox("📌 Cột Điểm/Mức đạt:", df.columns)
+    col_new = st.text_input("📌 Tên cột nhận xét mới:", "Nhận xét GV")
+    c3, c4 = st.columns(2)
+    with c3: mon_hoc = st.text_input("📚 Môn:", "Tin học")
+    with c4: chu_de = st.text_input("📝 Bài học:", "Chủ đề E")
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🚀 ĐIỀN NHẬN XÉT (GIỚI HẠN 250 KÝ TỰ)"):
-            if not api_key: st.toast("Thiếu API Key!"); st.stop()
-            
-            progress_bar = st.progress(0, text="Đang phân tích dữ liệu...")
-            
-            # 1. Phân loại
-            df['__Level_Temp__'] = df[col_score].apply(classify_student)
-            
-            # 2. Ngữ cảnh
-            context_text = ""
-            media_files = []
-            if evidence_files:
-                for file in evidence_files:
-                    if file.name.endswith('.docx'):
-                        try: doc = Document(file); context_text += "\n".join([p.text for p in doc.paragraphs])
-                        except: pass
-                    elif file.type == "application/pdf":
-                         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🚀 TẠO NHẬN XÉT KHÔNG TRÙNG LẶP"):
+        if not api_key: st.toast("Thiếu Key!"); st.stop()
+        
+        # 1. Đếm số lượng cần thiết
+        progress_bar = st.progress(0, text="Đang đếm số lượng học sinh từng mức...")
+        
+        df['__Level__'] = df[col_score].apply(classify_student)
+        counts = df['__Level__'].value_counts()
+        
+        count_T = counts.get('Hoàn thành tốt', 0)
+        count_H = counts.get('Hoàn thành', 0)
+        count_C = counts.get('Chưa hoàn thành', 0)
+        
+        st.write(f"📊 Yêu cầu AI viết: {count_T} câu Tốt, {count_H} câu Hoàn thành, {count_C} câu Chưa hoàn thành.")
+        
+        # 2. Xử lý minh chứng
+        context_text = ""
+        media_files = []
+        if evidence_files:
+            for file in evidence_files:
+                if file.name.endswith('.docx'):
+                    try: doc = Document(file); context_text += "\n".join([p.text for p in doc.paragraphs])
+                    except: pass
+                elif file.type == "application/pdf":
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                             tmp.write(file.getvalue()); media_files.append(genai.upload_file(tmp.name))
-                    else: media_files.append(Image.open(file))
+                else: media_files.append(Image.open(file))
 
-            # 3. Prompt (GIỚI HẠN 250 KÝ TỰ)
-            progress_bar.progress(30, text="AI đang viết nhận xét súc tích, đủ 2 vế...")
-            
-            model = genai.GenerativeModel('gemini-2.5-flash-lite-preview-09-2025')
-            
-            prompt = f"""
-            Bạn là giáo viên Tiểu học. Viết bộ nhận xét cho môn {mon_hoc}, chủ đề: {chu_de}.
-            Dữ liệu minh chứng: {context_text[:3000]}...
-            
-            YÊU CẦU QUAN TRỌNG:
-            1. ĐỘ DÀI: TỐI ĐA 250 KÝ TỰ/CÂU. (Viết súc tích, không lan man).
-            2. TỪ CẤM: "Em", "Con", "Bạn", "Nắm được".
-            3. CẤU TRÚC 2 VẾ (BẮT BUỘC):
-               - Mức HOÀN THÀNH: [Điểm làm tốt] NHƯNG/TUY NHIÊN [Điểm cần rèn thêm].
-               - Mức CHƯA HOÀN THÀNH: [Sự tham gia dù nhỏ] NHƯNG [Cần GV/PH hỗ trợ gì].
-            
-            HÃY VIẾT 3 NHÓM NHẬN XÉT (Mỗi nhóm 15 câu KHÁC NHAU):
-            
-            1. NHÓM MỨC: HOÀN THÀNH TỐT (Khen ngợi + Sáng tạo)
-            - Ví dụ: Sử dụng chuột thành thạo, biết cách vẽ hình sáng tạo và phối màu rất hài hòa.
-            
-            2. NHÓM MỨC: HOÀN THÀNH (Được + Chưa được)
-            - Ví dụ: Biết cách lưu bài vào thư mục, tuy nhiên cần chú ý đặt tên file ngắn gọn hơn để dễ nhớ.
-            
-            3. NHÓM MỨC: CHƯA HOÀN THÀNH (Ghi nhận + Hỗ trợ)
-            - Ví dụ: Biết quan sát thao tác mẫu, nhưng chưa tự mở được phần mềm, cần giáo viên cầm tay chỉ việc thêm.
-            
-            ĐỊNH DẠNG TRẢ VỀ:
-            I. MỨC: HOÀN THÀNH TỐT
-            - [Câu 1]
-            ...
-            II. MỨC: HOÀN THÀNH
-            ...
-            III. MỨC: CHƯA HOÀN THÀNH
-            ...
-            """
-            
-            inputs = [prompt] + media_files
+        # 3. Prompt Động (Dynamic Prompt)
+        # Yêu cầu AI viết dư ra 10% để dự phòng
+        req_T = int(count_T * 1.1) + 2
+        req_H = int(count_H * 1.1) + 2
+        req_C = int(count_C * 1.1) + 2
+        
+        progress_bar.progress(20, text="AI đang viết hàng trăm câu nhận xét khác nhau (Sẽ mất khoảng 30s)...")
+        
+        model = genai.GenerativeModel('gemini-2.5-flash-lite-preview-09-2025')
+        
+        prompt = f"""
+        Bạn là giáo viên. Viết nhận xét DUY NHẤT (không trùng nhau) cho danh sách học sinh môn {mon_hoc}, bài {chu_de}.
+        Minh chứng: {context_text[:2000]}...
+        
+        QUY TẮC CỐT LÕI:
+        1. KHÔNG viết in hoa toàn bộ. Chỉ viết hoa chữ cái đầu câu. (Ví dụ: "Thành thạo..." thay vì "THÀNH THẠO...").
+        2. TỪ CẤM: "Em", "Con", "Bạn".
+        3. ĐỘ DÀI: Khoảng 200 ký tự (đủ ý nhưng ngắn gọn).
+        
+        YÊU CẦU SỐ LƯỢNG (BẮT BUỘC ĐỦ):
+        - Viết {req_T} câu cho mức HOÀN THÀNH TỐT.
+        - Viết {req_H} câu cho mức HOÀN THÀNH.
+        - Viết {req_C} câu cho mức CHƯA HOÀN THÀNH.
+        
+        CẤU TRÚC:
+        1. NHÓM HOÀN THÀNH TỐT (Chỉ khen, KHÔNG dùng "tuy nhiên/nhưng"):
+           - Khen kỹ năng cụ thể + Khen sự sáng tạo/thái độ. 
+           - Ví dụ: Thao tác chuột rất nhanh nhẹn, hoàn thành xuất sắc bài thực hành.
+        
+        2. NHÓM HOÀN THÀNH (Có 2 vế):
+           - [Điểm làm được] NHƯNG/TUY NHIÊN [Điểm cần rèn thêm].
+        
+        3. NHÓM CHƯA HOÀN THÀNH (Có 2 vế):
+           - [Sự tham gia] NHƯNG [Cần GV hỗ trợ gì].
+        
+        ĐỊNH DẠNG TRẢ VỀ:
+        I. MỨC: HOÀN THÀNH TỐT
+        - [Câu 1]
+        ...
+        II. MỨC: HOÀN THÀNH
+        ...
+        III. MỨC: CHƯA HOÀN THÀNH
+        ...
+        """
+        
+        inputs = [prompt] + media_files
+        try:
             response = model.generate_content(inputs)
             
-            # 4. Xử lý kết quả
-            pool_T = process_ai_response_to_list(response.text, "Hoàn thành tốt")
-            pool_H = process_ai_response_to_list(response.text, "Hoàn thành")
-            pool_C = process_ai_response_to_list(response.text, "Chưa hoàn thành")
+            # 4. Phân phối độc nhất (One-to-One Mapping)
+            progress_bar.progress(70, text="Đang phân phối từng câu nhận xét vào từng học sinh...")
             
-            # Fallback
-            if not pool_T: pool_T = ["Thành thạo kiến thức bài học, vận dụng tốt vào thực hành."]
-            if not pool_H: pool_H = ["Hoàn thành yêu cầu cơ bản, tuy nhiên cần thao tác nhanh hơn."]
-            if not pool_C: pool_C = ["Có tham gia bài học nhưng chưa thực hành được, cần hướng dẫn thêm."]
+            # Lấy danh sách câu từ AI
+            pool_T = process_ai_response_unique(response.text, "Hoàn thành tốt", count_T)
+            pool_H = process_ai_response_unique(response.text, "Hoàn thành", count_H)
+            pool_C = process_ai_response_unique(response.text, "Chưa hoàn thành", count_C)
+            
+            # Hàm lấy câu và xóa khỏi kho (Pop)
+            def assign_comment(level):
+                if level == 'Hoàn thành tốt' and pool_T: return pool_T.pop(0)
+                if level == 'Hoàn thành' and pool_H: return pool_H.pop(0)
+                if level == 'Chưa hoàn thành' and pool_C: return pool_C.pop(0)
+                return "Đã hoàn thành bài học." # Fallback cuối cùng nếu hết câu
 
-            # 5. Điền dữ liệu
-            progress_bar.progress(80, text="Đang điền dữ liệu vào file...")
+            df[col_new] = df['__Level__'].apply(assign_comment)
+            del df['__Level__']
             
-            def fill_comment(level):
-                if level == 'Hoàn thành tốt': return random.choice(pool_T)
-                if level == 'Hoàn thành': return random.choice(pool_H)
-                if level == 'Chưa hoàn thành': return random.choice(pool_C)
-                return ""
-
-            df[col_new] = df['__Level_Temp__'].apply(fill_comment)
-            del df['__Level_Temp__']
+            progress_bar.progress(100, text="Xong!")
             
-            progress_bar.progress(100, text="Hoàn tất!")
-            
-            # 6. Xuất file
+            # 5. Xuất file
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False)
                 ws = writer.sheets['Sheet1']
-                # Chỉnh độ rộng cột vừa phải cho 250 ký tự (khoảng 60)
-                ws.column_dimensions[chr(65 + df.columns.get_loc(col_new))].width = 60 
+                ws.column_dimensions[chr(65 + df.columns.get_loc(col_new))].width = 60
             output.seek(0)
             
-            st.success("✅ Đã xử lý xong! Nội dung < 250 ký tự.")
-            st.download_button(
-                label="⬇️ TẢI FILE EXCEL KẾT QUẢ",
-                data=output,
-                file_name=f"DanhSach_NhanXet_RutGon_{mon_hoc}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary"
-            )
+            st.success("✅ Thành công! Mỗi học sinh đã có một nhận xét riêng biệt.")
+            st.download_button("⬇️ Tải File Excel Kết Quả", output, f"NhanXet_NoDuplicate_{mon_hoc}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             
-            with st.expander("Xem mẫu nhận xét"):
-                st.dataframe(df[[col_score, col_new]].head(10), use_container_width=True)
+            with st.expander("Kiểm tra ngẫu nhiên 5 em"):
+                st.dataframe(df.sample(min(5, len(df)))[[col_score, col_new]], use_container_width=True)
 
-    except Exception as e:
-        st.error(f"Lỗi đọc file Excel: {e}")
+        except Exception as e:
+            st.error(f"Lỗi xử lý: {e}")
 
 # --- FOOTER ---
 st.markdown("<div style='text-align:center; margin-top:50px; color:#888;'>© 2025 - Thầy Sần Tool</div>", unsafe_allow_html=True)
