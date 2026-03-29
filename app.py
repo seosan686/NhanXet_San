@@ -178,7 +178,7 @@ if student_file:
         
         progress_bar.progress(20, text="AI đang viết nhận xét...")
         
-        model = genai.GenerativeModel('gemini-2.5-flash-lite-preview-09-2025')
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
         
         prompt = f"""
         Bạn là giáo viên. Viết nhận xét DUY NHẤT cho HS môn {mon_hoc}, bài {chu_de}.
